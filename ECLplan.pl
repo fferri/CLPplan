@@ -4,22 +4,9 @@
 %:- use_module(library(lists)).
 %:- use_module(library(terms)).
 
-debug_predicate(main).
-%debug_predicate(set_state).
-%debug_predicate(set_transitions).
-%debug_predicate(set_transition).
-%debug_predicate(set_one_fluent).
+:- op(100,fx,verbose).
 
-debug(P,T):-
-    debug_predicate(P),!,
-    write(P),write(':'),
-    (
-        is_list(T)
-            -> (foreach(S,T) do write(' '),write(S))
-            ;  write(' '),write(T)
-    ),
-    nl.
-debug(_,_).
+verbose(X):-write(X),write('...'),nl,(X -> R=success ; R=fail),write(X),write(' -> '),write(R),nl.
 
 main_iddfs(MaxN) :- main_iddfs(2,MaxN).
 main_iddfs(N,_) :-
@@ -28,41 +15,25 @@ main_iddfs(N,_) :-
 main_iddfs(N,MaxN) :- N<MaxN, succ(N,N1), main_iddfs(N1,MaxN).
 
 main(N) :-
-    statistics(runtime,_),
     main(N,ActionsOcc,States),
     write_solution(N,ActionsOcc,States).
 
 main(N) :-
-    %statistics(runtime,[_,Time]),
-    %write('No (more) solutions: RunTime: '),write(Time),nl.
     write('No (more) solutions for N='),write(N),nl,
     fail.
    
 main(N,ActionsOcc,States):-
-    debug(main,'Building fluents/actions/init/goal list...'),
     setof(F,fluent(F),Lf),
     setof(A,action(A),La),
     setof(F,initially(F),Init),
     setof(F,goal(F),Goal),
-    debug(main,'Make states/actions structure...'),
     make_states(N,Lf,States),
     make_action_occurrences(N,La,ActionsOcc),
-    debug(main,'Set initial state variables...'),
     set_initial(Init,States),
-    debug(main,'Set goal state variables...'),
     set_goal(Goal,States), 
-    debug(main,'Set transitions...'),
     set_transitions(ActionsOcc,States),
-    debug(main,'Set executability...'),
     set_executability(ActionsOcc,States),
-    %length(ActionsOcc,LAOcc),
-    %debug(main,['    ',LAOcc,' AOcc']),
-    %debug(main,'ActionsOcc:'),forall(member(AOcc1,ActionsOcc),debug(main,AOcc1)),
-    %debug(main,'States:'),    forall(member(S1,States),debug(main,S1)),
-    %search(AllActions,0,occurrence,indomain_min,dbs(2,bbs(200)),[]),
-    debug(main,'Labeling...'),
     get_all_actions(ActionsOcc, AllActions),   
-    %search(AllActions,0,most_constrained,min,complete,[]),
     search(AllActions,0,occurrence,indomain_min,complete,[]).
     %labeling(AllActions).
 
@@ -115,8 +86,8 @@ last(List,Last) :- append(_,[Last],List).
 set_goal(List,States) :-
     last(States,FinalState),
     set_state(List,FinalState).
-set_state([],_):-debug(set_state,finish).
-set_state([Fluent|Rest],State) :-debug(set_state,Fluent),
+set_state([],_).
+set_state([Fluent|Rest],State) :-
      (Fluent=mneg(F),!,member(fluent(F,0),State);
       member(fluent(Fluent,1),State)),
      set_state(Rest,State).
@@ -129,40 +100,25 @@ set_transitions([O|Occurrences],[S1,S2|Rest]) :-
 
 set_transition(_Occ,[],[],_,_).
 set_transition(Occ,[fluent(Fluent,IV)|R1],[fluent(Fluent,EV)|R2],FromState,ToState):-
-    debug(set_transition,[fluent,Fluent,IV,'->',EV]),
     set_one_fluent(Fluent,IV,EV,Occ,FromState,ToState),
     set_transition(Occ, R1, R2,FromState,ToState).
 
 
 set_one_fluent(Name,IV,EV, Occurrence,FromSt,ToSt) :-
-    debug(set_one_fluent,1),
     findall([X,L],causes(X,Name,L),Pos),
-    debug(set_one_fluent,2),
     findall([Y,M],causes(Y,mneg(Name),M),Neg),
-    debug(set_one_fluent,3),
     build_sum_prod(Pos, Occurrence, FromSt,PFormula,EV,p),
-    debug(set_one_fluent,4),
     build_sum_prod(Neg, Occurrence, FromSt,NFormula,EV,n),
-    debug(set_one_fluent,5),
     findall(Po1, caused(Po1,Name), StatPos),
-    debug(set_one_fluent,6),
     findall(Ne1, caused(Ne1,mneg(Name)), StatNeg),
-    debug(set_one_fluent,7),
     build_sum_stat(StatPos, ToSt, PStatPos,EV,p),
-    debug(set_one_fluent,8),
     build_sum_stat(StatNeg, ToSt, PStatNeg,EV,n),
-    debug(set_one_fluent,9),
     append(PFormula,PStatPos,Positive),
-    debug(set_one_fluent,10),
     append(NFormula,PStatNeg,Negative),
-    debug(set_one_fluent,11),
     sum(Positive,#=,PosFired),
-    debug(set_one_fluent,12),
     sum(Negative,#=,NegFired),
-    debug(set_one_fluent,13),
 %%% Redundant constraint (it doesn't seem useful)
     PosFired * NegFired #= 0,
-    debug(set_one_fluent,14),
     EV <=> (PosFired + IV - IV * NegFired  #> 0).
 
 
@@ -264,8 +220,6 @@ diff(A,B,C) :- A \== B, A \== C, C \== B.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 write_solution(_N,ActionsOcc,States):-
-    statistics(runtime,[_,Time]),
-    write('Solution found in Time: '),write(Time),nl,nl,
     write('Initial State:'),nl, States=[S|_],write_state(S),nl,
     write('Final State:'),nl, append(_,[Last],States),write_state(Last),nl,
     %write('****transitions set****'),nl, dump_result(ActionsOcc,States),
